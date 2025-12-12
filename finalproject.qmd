@@ -5,32 +5,136 @@ editor: visual
 ---
 
 ```{r}
-#load dataset 
-arrests <- read.csv('Arrests_2015-2020.csv')
-incidents <- read.csv('Incidents_2015-2020.csv')
-charges <- read.csv('Charges_2015-2020.csv')
+#load datasets (use ALL, which has years 2015 - 2022)
+#arrests <- read.csv('Arrests_2015-2020.csv')
+#incidents <- read.csv('Incidents_2015-2020.csv')
+#charges <- read.csv('Charges_2015-2020.csv')
+arrests <- read.csv('Arrests_All.csv')
+charges <- read.csv('Charges_All.csv')
+#race_codes <- 
+```
+
+### EDA
+
+```{r}
+colnames(arrests)
+arrests <- arrests[c("SEX", "CURRENT.STATUS", "GO.NO", "RACE", "PIN", "ETHNICITY", "ARREST.REASON", "SUMMARY.OF.FACTS", "AGE", "ARREST.DATE", "ARREST.TYPE")]
+head(arrests, 3) 
+# --> convert to datetime? 
 ```
 
 
-### EDA 
+
+```{r}
+print("sex")
+print(table(arrests$SEX))
+print("race")
+print(table(arrests$RACE))
+print("ethnicity")
+print(table(arrests$ETHNICITY)) #has slightly more NA values
+print("age")
+print(table(arrests$AGE)) #split into decades 
+print("status")
+print(table(arrests$CURRENT.STATUS)) 
+#cited -> either booked (jail) or cited (assinged court date + released)
+```
+
+
+
+```{r}
+colnames(charges) #warrant number -> means there is likely no corresponding arrest 
+charges <- charges[c("GO.NO", "PIN", "STATUTE", "OFFENSE.DATE", "SEVERITY", "WARRANT.NUMBER")]
+head(charges, 3) #severity -> regular criminal classes (felony, misdemeanor, etc.)
+# -- > convert date to datetime
+```
 
 ```{r}
 
+```
 
+```{r}
+#TODO:
+# - split into decades 
+# - figure out time thing if I want 
+# - add race codes (maybe after)
+
+
+# - what can we learn about arrests with/without corresponding charges?
+
+# - i wanted to do something with merging arrests vs what happened w the charge 
+# - check if all types of current_statuses might have a corresponding charge 
+# - my CORE question: what is going on with arrests that have no charge? and who is likely to 
+#fall into this category? (how to control for covariates)
+
+#"Current Status" does tell us whether there is a corresponding charge(s) -- only "other" shouldn't have one
+#can learn severity of charge
+
+# - USE: Monte Carlo, Tidyverse / Data . Table, REGEX, Visualization 
 ```
 
 ### Aggregating
 
 ```{r}
+head(charges)
+
+```
+
+
+```{r}
+
+sum(is.na(arrests$ARREST.REASON))
+
+sum(is.na(charges$STATUTE))
+```
+
+```{r}
+#arrests AND charge both have GO.NO (incident) and a PIN (person) 
+#arrest_charges <- merge(arrests, charges, by = c("GO.NO", "PIN"), all.x = TRUE, all.y = TRUE)
+colnames(arrest_charges)
+
+```
+
+```{r}
+notnull <- arrest_charges[(!is.na(arrest_charges$STATUTE)) & (!is.na(arrest_charges$ARREST.REASON)), ]
+#so ~331 / 507 have both 
+#there may be multiple charges for 1 arrest (check? )
+```
+
+```{r}
+notnull
+```
+#things to check:
+#other <- arrest_charges[arrest_charges$CURRENT]
+#arrests -> no matching charge 
+
+#arrests -> average number of matching charge per group 
+
+#arrests -> 0 matching charges vs one or more matching charges 
+
+
+```
+
+
+```{r}
 #instructions from Kaggle
 arrests$INCIDENT.NO <- sub("^SJ.{4}", "", arrests$GO.NO)
+incident_arrests <- merge(arrests, incidents, on=GO.NO, all.x = TRUE, all.y = TRUE)
 ```
 
 ### Compare Groups
 
-### Stat/Perm tests to check differences (logistic regression?) 
+```{r}
+
+
+```
+
+### Stat/Perm tests to check differences
 
 ### Check incidents differences (based on groups that are statistically different)
 
+### Regex/Incident Type Grouping
 
-### Regex/Incident Type Grouping 
+```{r}
+#load incidents 
+
+```
