@@ -1,0 +1,36 @@
+---
+title: "finalproject"
+format: html
+editor: visual
+---
+
+```{r}
+#load dataset 
+arrests <- read.csv('Arrests_2015-2020.csv')
+incidents <- read.csv('Incidents_2015-2020.csv')
+charges <- read.csv('Charges_2015-2020.csv')
+```
+
+
+### EDA 
+
+```{r}
+
+
+```
+
+### Aggregating
+
+```{r}
+#instructions from Kaggle
+arrests$INCIDENT.NO <- sub("^SJ.{4}", "", arrests$GO.NO)
+```
+
+### Compare Groups
+
+### Stat/Perm tests to check differences (logistic regression?) 
+
+### Check incidents differences (based on groups that are statistically different)
+
+
+### Regex/Incident Type Grouping 
