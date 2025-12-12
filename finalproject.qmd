@@ -3,15 +3,23 @@ title: "finalproject"
 format: html
 editor: visual
 ---
+```{r}
+library(data.table)
+
+```
 
 ```{r}
-#load datasets (use ALL, which has years 2015 - 2022)
-#arrests <- read.csv('Arrests_2015-2020.csv')
-#incidents <- read.csv('Incidents_2015-2020.csv')
-#charges <- read.csv('Charges_2015-2020.csv')
+#load datasets 
 arrests <- read.csv('Arrests_All.csv')
 charges <- read.csv('Charges_All.csv')
-#race_codes <- 
+```
+
+```{r}
+# - what can we learn about arrests without corresponding charges? who is likely
+#to fall into this group?
+
+
+# - mc, dt, visuals 
 ```
 
 ### EDA
@@ -20,9 +28,7 @@ charges <- read.csv('Charges_All.csv')
 colnames(arrests)
 arrests <- arrests[c("SEX", "CURRENT.STATUS", "GO.NO", "RACE", "PIN", "ETHNICITY", "ARREST.REASON", "SUMMARY.OF.FACTS", "AGE", "ARREST.DATE", "ARREST.TYPE")]
 head(arrests, 3) 
-# --> convert to datetime? 
 ```
-
 
 
 ```{r}
@@ -40,91 +46,198 @@ print(table(arrests$CURRENT.STATUS))
 ```
 
 
-
 ```{r}
-colnames(charges) #warrant number -> means there is likely no corresponding arrest 
+colnames(charges) 
 charges <- charges[c("GO.NO", "PIN", "STATUTE", "OFFENSE.DATE", "SEVERITY", "WARRANT.NUMBER")]
 head(charges, 3) #severity -> regular criminal classes (felony, misdemeanor, etc.)
-# -- > convert date to datetime
 ```
 
 ```{r}
+sum(is.na(arrests$PIN))
+arrests[arrests$PIN == "", ]
+sum(is.na(charges$PIN)) 
+charges[charges$PIN == "", ]
+```
+
+```{r}
+sum(is.na(arrests$GO.NO))
+arrests[arrests$GO.NO == "", ]
+sum(is.na(charges$GO.NO)) 
+charges[charges$GO.NO == "", ]
+```
+
+```{r}
+#sum(is.na(arrests$PIN)) #drop
+arrests <- arrests[!is.na(arrests$PIN), ]
+
+
+sm_a <- arrests[arrests$GO.NO == "", ] #warrants 
+```
+
+```{r}
+table(sm_a$CURRENT.STATUS)
 
 ```
 
 ```{r}
-#TODO:
-# - split into decades 
-# - figure out time thing if I want 
-# - add race codes (maybe after)
+sm_c <- charges[(charges$GO.NO == "")]
 
+```
 
-# - what can we learn about arrests with/without corresponding charges?
+```{r}
+arrests[arrests$PIN == 5046796, ] #6 where GO.NO is blank
+```
 
-# - i wanted to do something with merging arrests vs what happened w the charge 
-# - check if all types of current_statuses might have a corresponding charge 
-# - my CORE question: what is going on with arrests that have no charge? and who is likely to 
-#fall into this category? (how to control for covariates)
+```{r}
+charges[charges$PIN == 5046796, ] #2 where GO.NO is blank
+```
 
-#"Current Status" does tell us whether there is a corresponding charge(s) -- only "other" shouldn't have one
-#can learn severity of charge
+```{r}
+arrest_charges_sm <- merge(sm_a, sm_c, by = c("PIN"))
+arrest_charges_sm
 
-# - USE: Monte Carlo, Tidyverse / Data . Table, REGEX, Visualization 
+```
+
+```{r}
+#issue because some rows in both arrests and charges do not have GO.NO 
+#will fix later
 ```
 
 ### Aggregating
 
 ```{r}
-head(charges)
-
-```
-
-
-```{r}
-
 sum(is.na(arrests$ARREST.REASON))
 
 sum(is.na(charges$STATUTE))
+
+#a complete row will have both of these not be null
 ```
 
 ```{r}
 #arrests AND charge both have GO.NO (incident) and a PIN (person) 
-#arrest_charges <- merge(arrests, charges, by = c("GO.NO", "PIN"), all.x = TRUE, all.y = TRUE)
-colnames(arrest_charges)
+setDT(arrests)
+setDT(charges)
 
+
+arrest_charges <- merge(arrests, charges, by = c("GO.NO", "PIN"), all.x = TRUE, all.y = TRUE)
+colnames(arrest_charges)
+nrow(arrest_charges)
 ```
+
+
+
+```{r}
+arrest_charges[(arrest_charges$PIN == 5046796) & (arrest_charges$GO.NO == ""), ]
+#some are joined only by PIN number (person)
+#all of these are matched together, when only the final two should 
+```
+
+```{r}
+#fix date issue:
+sample(arrest_charges$OFFENSE.DATE, 10, FALSE)
+```
+
+```{r}
+sample(arrest_charges$ARREST.DATE, 10, FALSE)
+```
+
+```{r}
+#match arrest date with offense date format 
+
+#start with month
+arrest_charges$ARREST.DATE_FIXED <- sub("^0", "", arrest_charges$ARREST.DATE)
+
+#then day
+arrest_charges$ARREST.DATE_FIXED <- sub("^(.+)/0", "\\1/", arrest_charges$ARREST.DATE_FIXED)
+
+#then year
+arrest_charges$ARREST.DATE_FIXED <- sub("/(\\d{2})$", "/20\\1", arrest_charges$ARREST.DATE_FIXED)
+```
+
+```{r}
+sample(arrest_charges$ARREST.DATE_FIXED, 10, FALSE)
+```
+
+```{r}
+#unmatch rows where the dates do not align (remove corresponding charge info):
+#find where GO.NO is blank -> Check if dates align (fix dates)
+#if dates do not align -> remove information about the charge (statute) since it is incorrect 
+arrest_charges[GO.NO == "" & ARREST.DATE_FIXED != OFFENSE.DATE, STATUTE := NA]
+```
+
+```{r}
+arrest_charges[(arrest_charges$PIN == 5046796) & (arrest_charges$GO.NO == ""), ]
+```
+
+```{r}
+#remove duplicate arrest information 
+#remove duplicates of PIN, ARREST_DATE, SUMMARY.OF.FACTS
+arrest_charges <- rbind(
+  unique(arrest_charges[GO.NO == ""], 
+         by = c("PIN", "SUMMARY.OF.FACTS", "ARREST.REASON")),
+  arrest_charges[GO.NO != ""]
+)
+```
+
 
 ```{r}
 notnull <- arrest_charges[(!is.na(arrest_charges$STATUTE)) & (!is.na(arrest_charges$ARREST.REASON)), ]
-#so ~331 / 507 have both 
-#there may be multiple charges for 1 arrest (check? )
-```
-
-```{r}
-notnull
-```
-#things to check:
-#other <- arrest_charges[arrest_charges$CURRENT]
-#arrests -> no matching charge 
-
-#arrests -> average number of matching charge per group 
-
-#arrests -> 0 matching charges vs one or more matching charges 
-
-
+head(notnull)
+nrow(notnull)
 ```
 
 
 ```{r}
-#instructions from Kaggle
-arrests$INCIDENT.NO <- sub("^SJ.{4}", "", arrests$GO.NO)
-incident_arrests <- merge(arrests, incidents, on=GO.NO, all.x = TRUE, all.y = TRUE)
+#there may be multiple charges for 1 arrest (check/explore avg. # charges) 
+
+```
+
+```{r}
+#charges without an arrest
+empty_charges <- arrest_charges[(!is.na(arrest_charges$STATUTE)) & (is.na(arrest_charges$ARREST.REASON)), ]
+#check how many are warrants
+table(empty_charges$ARREST.REASON)
+```
+
+```{r}
+#arrests with no charges (arrest reason without a statute) -> investigate
+
+#is the date thing fixed then? 
+#earlier i was matching the empty arrests by joining the date + PIN with charges
+
+empty_arrests <- arrest_charges[(is.na(arrest_charges$STATUTE)) & (!is.na(arrest_charges$ARREST.REASON)), ]
+empty_arrests
+```
+
+```{r}
+#all of these also have matches 
+empty_arrests[PIN == 327937, ]
+```
+```{r}
+charges[PIN == 327937, ]
+```
+
+```{r}
+cols <- c("STATUTE", "OFFENSE.DATE", "SEVERITY", "WARRANT.NUMBER", "GO.NO")
+empty_arrests[, (cols) := NULL]
+```
+
+```{r}
+leftover_arrests_with_charges <- merge(empty_arrests, charges, by.x = c("PIN","ARREST.DATE_FIXED"),
+                                       by.y = c("PIN", "OFFENSE.DATE"), all.x = TRUE, all.y = FALSE)
+```
+
+```{r}
+small_empty_arrests <- leftover_arrests_with_charges[is.na(STATUTE), ]
+small_empty_arrests #truly the arrests without charges 
 ```
 
 ### Compare Groups
 
 ```{r}
-
+#TODO:
+# - split into decades 
+# - add race codes 
 
 ```
 
@@ -135,6 +248,7 @@ incident_arrests <- merge(arrests, incidents, on=GO.NO, all.x = TRUE, all.y = TR
 ### Regex/Incident Type Grouping
 
 ```{r}
-#load incidents 
-
+#instructions from Kaggle
+arrests$INCIDENT.NO <- sub("^SJ.{4}", "", arrests$GO.NO)
+incident_arrests <- merge(arrests, incidents, on=GO.NO, all.x = TRUE, all.y = TRUE)
 ```
