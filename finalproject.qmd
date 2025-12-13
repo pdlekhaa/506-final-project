@@ -356,6 +356,13 @@ ggplot(race_prop_all, aes(x = RACE_GROUP, y = prop, fill = type)) +
   scale_fill_manual(values = c("steelblue", "salmon")) +
   labs(y = "Proportion", x = "Race Group", fill = "Charge Type")
 #seems to be a difference
+
+ggsave(
+  filename = "race_proportions.png",
+  width = 9,
+  height = 4,
+  dpi = 300
+)
 ```
 
 ```{r}
@@ -387,7 +394,7 @@ t_stat <- sum(race_prop_all_h[, diff_prop])
 #run a test: randomly sample nrows(small) from the large and see how frequent this sample 
 
 count <-  rep(NA, 10000)
-t_stats <- rep(NA, 10000)
+t_stats <- rep(-1, 10000)
 
 for (i in 1:10000) {
   #sample 
@@ -402,6 +409,7 @@ for (i in 1:10000) {
   
   #compare
   count[i] <- curr_t_stat >= t_stat
+  t_stats[i] <- curr_t_stat
   
 }
 
@@ -456,7 +464,7 @@ hlm_incidents #about 1,000 rows with matching incidents
 
 
 ```{r}
-sort(table(hlm_incidents[, INCIDENT.DESCRIPTION]), decreasing = TRUE)[1:20]
+sort(table(hlm_incidents[, INCIDENT.DESCRIPTION]), decreasing = TRUE)[1:10]
 #most frequent incidents 
 ```
 
