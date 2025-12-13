@@ -371,19 +371,92 @@ print(race_prop)
 ```
 
 
-### Permutation/MC test to check differences
+### Permutation Test
 
-#### Race
+
 ```{r}
-#mc check, or do a t-test 
+#total difference in proportions (overall t_stat)
+race_prop_all_h <- merge(race_prop, race_small_prop, by = c("RACE_GROUP"))
+race_prop_all_h[, diff_prop := abs(prop.x - prop.y)]
+t_stat <- sum(race_prop_all_h[, diff_prop]) 
+```
+
+```{r}
+#test statistic: sum difference in proportions 
+
+#run a test: randomly sample nrows(small) from the large and see how frequent this sample 
+
+count <-  rep(NA, 10000)
+t_stats <- rep(NA, 10000)
+
+for (i in 1:10000) {
+  #sample 
+  sample <- race_final_arrest_charges[sample(.N,  nrow(race_small_empty_arrests))]
+  sample_props <- sample[, .N, by = RACE_GROUP] |>
+  _[, prop := N/nrow(sample)]
+  
+  #calculate current t-stat
+  t_stat_prop <- merge(sample_props, race_prop, by = c("RACE_GROUP"))
+  t_stat_prop[, diff_prop := abs(prop.x - prop.y)]
+  curr_t_stat <- sum(t_stat_prop[, diff_prop]) 
+  
+  #compare
+  count[i] <- curr_t_stat >= t_stat
+  
+}
+
+#want to test the likelihood of it being random that there is this difference in proportions
 ```
 
 
-### Incident Differences 
+```{r}
+p_val <- mean(count)
+p_val
+```
+
+
+### Incidents 
+
+```{r}
+hlm <- race_small_empty_arrests[RACE_GROUP == "HISPANIC/LATIN/MEXICAN", ]
+hlm
+#this group had the largest difference 
+#more and highest proportion arrests without charges 
+```
+
+```{r}
+nrow(hlm[GO.NO.x != "", ]) / nrow(hlm) #most do (should) have a corresponding incident
+hlm <- hlm[GO.NO.x != "", ]
+```
+
 ```{r}
 #instructions from Kaggle
-arrests$INCIDENT.NO <- sub("^SJ.{4}", "", arrests$GO.NO)
-
-#check incidents differences 
-#find top 10-20 incidents when there is no corresponding charge  
+incidents <- read.csv('Incidents_All.csv')
 ```
+
+```{r}
+incidents
+```
+
+```{r}
+hlm$INCIDENT.NO <- sub("^SJ.{4}", "", hlm$GO.NO.x) #some are warrants and others
+hlm$INCIDENT.NO <- gsub("[^0-9]", "", hlm$INCIDENT.NO )
+hlm$INCIDENT.NO <- as.integer(hlm$INCIDENT.NO)
+
+#hlm$INCIDENT.NO
+```
+
+
+```{r}
+hlm_incidents <- merge(hlm, incidents, by = "INCIDENT.NO")
+hlm_incidents #about 1,000 rows with matching incidents
+#a little more than a quarter of the total hlm rows without a charge
+```
+
+
+
+```{r}
+sort(table(hlm_incidents[, INCIDENT.DESCRIPTION]), decreasing = TRUE)[1:20]
+#most frequent incidents 
+```
+
