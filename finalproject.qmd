@@ -4,6 +4,7 @@ format: html
 editor: visual
 ---
 ```{r}
+#note: report was typed and complied with latex
 library(data.table)
 library(ggplot2)
 library(stringr)
