@@ -5,7 +5,8 @@ editor: visual
 ---
 ```{r}
 library(data.table)
-
+library(ggplot2)
+library(stringr)
 ```
 
 ```{r}
@@ -14,13 +15,6 @@ arrests <- read.csv('Arrests_All.csv')
 charges <- read.csv('Charges_All.csv')
 ```
 
-```{r}
-# - what can we learn about arrests without corresponding charges? who is likely
-#to fall into this group?
-
-
-# - mc, dt, visuals 
-```
 
 ### EDA
 
@@ -76,11 +70,10 @@ sm_a <- arrests[arrests$GO.NO == "", ] #warrants
 
 ```{r}
 table(sm_a$CURRENT.STATUS)
-
 ```
 
 ```{r}
-sm_c <- charges[(charges$GO.NO == "")]
+sm_c <- charges[(charges$GO.NO == ""), ]
 
 ```
 
@@ -95,15 +88,14 @@ charges[charges$PIN == 5046796, ] #2 where GO.NO is blank
 ```{r}
 arrest_charges_sm <- merge(sm_a, sm_c, by = c("PIN"))
 arrest_charges_sm
-
 ```
 
 ```{r}
 #issue because some rows in both arrests and charges do not have GO.NO 
-#will fix later
+#will fix in next section
 ```
 
-### Aggregating
+### Merging
 
 ```{r}
 sum(is.na(arrests$ARREST.REASON))
@@ -155,7 +147,7 @@ arrest_charges$ARREST.DATE_FIXED <- sub("/(\\d{2})$", "/20\\1", arrest_charges$A
 ```
 
 ```{r}
-sample(arrest_charges$ARREST.DATE_FIXED, 10, FALSE)
+sample(arrest_charges$ARREST.DATE_FIXED, 10, FALSE) #looks good
 ```
 
 ```{r}
@@ -188,22 +180,31 @@ nrow(notnull)
 
 
 ```{r}
-#there may be multiple charges for 1 arrest (check/explore avg. # charges) 
+#there may be multiple charges for 1 arrest 
+#GIVEN an arrest has at least one corresponding charge, what is the average charges / arrest? 
 
+print("avg. number of charges")
+notnull[, .(num_charges = .N), by = c("PIN", "SUMMARY.OF.FACTS", "ARREST.DATE")] |>
+  _[, num_charges] |>
+  mean()
 ```
 
 ```{r}
 #charges without an arrest
 empty_charges <- arrest_charges[(!is.na(arrest_charges$STATUTE)) & (is.na(arrest_charges$ARREST.REASON)), ]
+nrow(empty_charges)
+
 #check how many are warrants
-table(empty_charges$ARREST.REASON)
+nrow(empty_charges[WARRANT.NUMBER != "", ])
+
+#~3/4 have warrant numbers
 ```
+
+
 
 ```{r}
 #arrests with no charges (arrest reason without a statute) -> investigate
-
-#is the date thing fixed then? 
-#earlier i was matching the empty arrests by joining the date + PIN with charges
+#try matching the empty arrests by joining the date + PIN with charges
 
 empty_arrests <- arrest_charges[(is.na(arrest_charges$STATUTE)) & (!is.na(arrest_charges$ARREST.REASON)), ]
 empty_arrests
@@ -213,12 +214,13 @@ empty_arrests
 #all of these also have matches 
 empty_arrests[PIN == 327937, ]
 ```
+
 ```{r}
 charges[PIN == 327937, ]
 ```
 
 ```{r}
-cols <- c("STATUTE", "OFFENSE.DATE", "SEVERITY", "WARRANT.NUMBER", "GO.NO")
+cols <- c("STATUTE", "OFFENSE.DATE", "SEVERITY", "WARRANT.NUMBER")
 empty_arrests[, (cols) := NULL]
 ```
 
@@ -228,27 +230,160 @@ leftover_arrests_with_charges <- merge(empty_arrests, charges, by.x = c("PIN","A
 ```
 
 ```{r}
-small_empty_arrests <- leftover_arrests_with_charges[is.na(STATUTE), ]
-small_empty_arrests #truly the arrests without charges 
+small_empty_arrests <- leftover_arrests_with_charges[is.na(STATUTE), ] 
+cols <- c("STATUTE", "SEVERITY", "WARRANT.NUMBER", "GO.NO.y")
+#remove cols because they don't exist anyway
+small_empty_arrests[, (cols) := NULL]
+small_empty_arrests #truly the arrests without charges
 ```
+
+```{r}
+#need final arrests + charges (arrest_charges)
+#bind original notnull + leftovers that are not part of small_empty_arrests 
+#final data.table to compare with
+true_leftover_arrests_with_charges <-leftover_arrests_with_charges[!is.na(STATUTE), ]
+```
+
+```{r}
+colnames(notnull)
+```
+
+```{r}
+colnames(true_leftover_arrests_with_charges)
+true_leftover_arrests_with_charges[, GO.NO.x := NULL]
+setnames(true_leftover_arrests_with_charges, "GO.NO.y", "GO.NO")
+true_leftover_arrests_with_charges[, OFFENSE.DATE := ARREST.DATE_FIXED]
+```
+
+```{r}
+final_arrest_charges <- rbind(true_leftover_arrests_with_charges, notnull)
+final_arrest_charges
+```
+
 
 ### Compare Groups
 
+#### Age
+
 ```{r}
-#TODO:
-# - split into decades 
-# - add race codes 
+hist(small_empty_arrests[, AGE])
+mean(small_empty_arrests[, AGE], na.rm = TRUE)
+```
+
+```{r}
+hist(final_arrest_charges[, AGE])
+mean(final_arrest_charges[, AGE], na.rm = TRUE)
 
 ```
 
-### Stat/Perm tests to check differences
+#### Sex 
 
-### Check incidents differences (based on groups that are statistically different)
+```{r}
+table(small_empty_arrests[, SEX]) / nrow(small_empty_arrests) * 100
 
-### Regex/Incident Type Grouping
+```
 
+```{r}
+table(final_arrest_charges[, SEX]) / nrow(final_arrest_charges) * 100
+```
+
+
+#### Race
+
+```{r}
+nrow(small_empty_arrests[RACE != ETHNICITY, ])
+nrow(small_empty_arrests[RACE == "", ])
+nrow(small_empty_arrests[ETHNICITY == "", ])
+#race is less empty than ethnicity
+```
+
+```{r}
+race_codes <- read.csv('Race_Codes.csv')
+head(race_codes, 1)
+setnames(small_empty_arrests, "RACE", "CODE")
+```
+
+```{r}
+small_empty_arrests[1]
+```
+
+```{r}
+race_small_empty_arrests <- merge(small_empty_arrests, race_codes, by = "CODE")
+```
+
+```{r}
+race_small_empty_arrests[, .N, by = RACE]
+```
+
+```{r}
+race_groups <- read.csv('race_groups.csv')
+race_small_empty_arrests <- merge(race_small_empty_arrests, race_groups, by = "RACE")
+race_small_empty_arrests[, .N, by = RACE_GROUP]
+```
+
+
+```{r}
+#perform similar actions to "regular" dt
+setnames(final_arrest_charges, "RACE", "CODE")
+race_final_arrest_charges <- merge(final_arrest_charges, race_codes, by = "CODE")
+race_final_arrest_charges <- merge(race_final_arrest_charges, race_groups, by = "RACE")
+race_final_arrest_charges[, .N, by = RACE_GROUP]
+```
+
+
+```{r}
+#get proportions
+race_small_prop <- race_small_empty_arrests[, .N, by = RACE_GROUP] |>
+  _[, prop := N/nrow(race_small_empty_arrests)]
+
+race_prop <- race_final_arrest_charges[, .N, by = RACE_GROUP] |>
+  _[, prop := N/nrow(race_final_arrest_charges)]
+```
+
+
+```{r}
+race_small_prop[, type := "No Charges"]
+race_prop[, type := "With Charges"]
+
+race_prop_all <- rbind(race_small_prop, race_prop)
+```
+
+```{r}
+
+ggplot(race_prop_all, aes(x = RACE_GROUP, y = prop, fill = type)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  scale_fill_manual(values = c("steelblue", "salmon")) +
+  labs(y = "Proportion", x = "Race Group", fill = "Charge Type")
+#seems to be a difference
+```
+
+```{r}
+
+print(race_small_prop)
+
+```
+
+```{r}
+
+print(race_prop)
+
+```
+
+
+### Permutation/MC test to check differences
+
+#### Race
+```{r}
+#mc check, or do a t-test 
+```
+
+
+### Incident Differences 
 ```{r}
 #instructions from Kaggle
 arrests$INCIDENT.NO <- sub("^SJ.{4}", "", arrests$GO.NO)
-incident_arrests <- merge(arrests, incidents, on=GO.NO, all.x = TRUE, all.y = TRUE)
+
+#check incidents differences 
+#find top 10-20 incidents when there is no corresponding charge  
 ```
