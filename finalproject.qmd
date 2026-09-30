@@ -1,8 +1,9 @@
 ---
 title: "finalproject"
 format: html
-editor: visual
+#editor: visual
 ---
+
 ```{r}
 #note: report was typed and complied with latex
 library(data.table)
@@ -16,7 +17,6 @@ arrests <- read.csv('Arrests_All.csv')
 charges <- read.csv('Charges_All.csv')
 ```
 
-
 ### EDA
 
 ```{r}
@@ -24,7 +24,6 @@ colnames(arrests)
 arrests <- arrests[c("SEX", "CURRENT.STATUS", "GO.NO", "RACE", "PIN", "ETHNICITY", "ARREST.REASON", "SUMMARY.OF.FACTS", "AGE", "ARREST.DATE", "ARREST.TYPE")]
 head(arrests, 3) 
 ```
-
 
 ```{r}
 print("sex")
@@ -39,7 +38,6 @@ print("status")
 print(table(arrests$CURRENT.STATUS)) 
 #cited -> either booked (jail) or cited (assinged court date + released)
 ```
-
 
 ```{r}
 colnames(charges) 
@@ -117,8 +115,6 @@ colnames(arrest_charges)
 nrow(arrest_charges)
 ```
 
-
-
 ```{r}
 arrest_charges[(arrest_charges$PIN == 5046796) & (arrest_charges$GO.NO == ""), ]
 #some are joined only by PIN number (person)
@@ -172,13 +168,11 @@ arrest_charges <- rbind(
 )
 ```
 
-
 ```{r}
 notnull <- arrest_charges[(!is.na(arrest_charges$STATUTE)) & (!is.na(arrest_charges$ARREST.REASON)), ]
 head(notnull)
 nrow(notnull)
 ```
-
 
 ```{r}
 #there may be multiple charges for 1 arrest 
@@ -200,8 +194,6 @@ nrow(empty_charges[WARRANT.NUMBER != "", ])
 
 #~3/4 have warrant numbers
 ```
-
-
 
 ```{r}
 #arrests with no charges (arrest reason without a statute) -> investigate
@@ -261,7 +253,6 @@ final_arrest_charges <- rbind(true_leftover_arrests_with_charges, notnull)
 final_arrest_charges
 ```
 
-
 ### Compare Groups
 
 #### Age
@@ -277,7 +268,7 @@ mean(final_arrest_charges[, AGE], na.rm = TRUE)
 
 ```
 
-#### Sex 
+#### Sex
 
 ```{r}
 table(small_empty_arrests[, SEX]) / nrow(small_empty_arrests) * 100
@@ -287,7 +278,6 @@ table(small_empty_arrests[, SEX]) / nrow(small_empty_arrests) * 100
 ```{r}
 table(final_arrest_charges[, SEX]) / nrow(final_arrest_charges) * 100
 ```
-
 
 #### Race
 
@@ -322,7 +312,6 @@ race_small_empty_arrests <- merge(race_small_empty_arrests, race_groups, by = "R
 race_small_empty_arrests[, .N, by = RACE_GROUP]
 ```
 
-
 ```{r}
 #perform similar actions to "regular" dt
 setnames(final_arrest_charges, "RACE", "CODE")
@@ -330,7 +319,6 @@ race_final_arrest_charges <- merge(final_arrest_charges, race_codes, by = "CODE"
 race_final_arrest_charges <- merge(race_final_arrest_charges, race_groups, by = "RACE")
 race_final_arrest_charges[, .N, by = RACE_GROUP]
 ```
-
 
 ```{r}
 #get proportions
@@ -340,7 +328,6 @@ race_small_prop <- race_small_empty_arrests[, .N, by = RACE_GROUP] |>
 race_prop <- race_final_arrest_charges[, .N, by = RACE_GROUP] |>
   _[, prop := N/nrow(race_final_arrest_charges)]
 ```
-
 
 ```{r}
 race_small_prop[, type := "No Charges"]
@@ -378,53 +365,89 @@ print(race_prop)
 
 ```
 
-
 ### Permutation Test
-
 
 ```{r}
 #total difference in proportions (overall t_stat)
 race_prop_all_h <- merge(race_prop, race_small_prop, by = c("RACE_GROUP"))
 race_prop_all_h[, diff_prop := abs(prop.x - prop.y)]
-t_stat <- sum(race_prop_all_h[, diff_prop]) 
 ```
 
 ```{r}
-#test statistic: sum difference in proportions 
+t_stat <- sum(race_prop_all_h[, diff_prop]) 
+t_stat
+```
 
-#run a test: randomly sample nrows(small) from the large and see how frequent this sample 
+```{r}
+invisible(race_small_empty_arrests[, charge := 0])
+invisible(race_final_arrest_charges[, charge := 1])
+```
 
-count <-  rep(NA, 10000)
-t_stats <- rep(-1, 10000)
+```{r}
+colnames(race_small_empty_arrests)
+```
 
-for (i in 1:10000) {
+```{r}
+colnames(race_final_arrest_charges)
+```
+
+```{r}
+perm_data <- rbind(race_small_empty_arrests, race_final_arrest_charges, fill=TRUE)
+```
+
+
+
+```{r}
+# permutation test
+
+num_samples <- 10000
+
+count <-  rep(NA, num_samples)
+t_stats <- rep(-1, num_samples)
+
+for (i in 1:num_samples) {
   #sample 
-  sample <- race_final_arrest_charges[sample(.N,  nrow(race_small_empty_arrests))]
-  sample_props <- sample[, .N, by = RACE_GROUP] |>
-  _[, prop := N/nrow(sample)]
+  sample <- perm_data[sample(.N,  nrow(perm_data), replace = TRUE)] #sample each observation once
+
+  #calculate proportion of race with false arrest, and proportion of race without false arrest 
+  
+  regular_arrests <- sample[charge == "1",
+      .(RACE_GROUP, charge)]
+  
+  false_arrests <- sample[charge == "0",
+      .(RACE_GROUP, charge)]
+
+  
+  #race proportions among regular arrests 
+
+  prop_regular_arrests <- regular_arrests[, .N, by = RACE_GROUP] |>
+  _[, ra_prop := N/nrow(regular_arrests)]
+  
+
+  #race proportions among false arrests 
+  prop_false_arrests <- false_arrests[, .N, by = RACE_GROUP] |>
+  _[, fa_prop := N/nrow(false_arrests)]
+  
+  
   
   #calculate current t-stat
-  t_stat_prop <- merge(sample_props, race_prop, by = c("RACE_GROUP"))
-  t_stat_prop[, diff_prop := abs(prop.x - prop.y)]
-  curr_t_stat <- sum(t_stat_prop[, diff_prop]) 
+  t_stat_prop <- merge(prop_regular_arrests, prop_false_arrests, by = c("RACE_GROUP"))
+  
+  t_stat_prop[, diff_prop := abs(ra_prop - fa_prop)]
+  curr_t_stat <- sum(t_stat_prop[, diff_prop])
   
   #compare
   count[i] <- curr_t_stat >= t_stat
   t_stats[i] <- curr_t_stat
-  
 }
-
-#want to test the likelihood of it being random that there is this difference in proportions
 ```
-
 
 ```{r}
 p_val <- mean(count)
 p_val
 ```
 
-
-### Incidents 
+### Incidents
 
 ```{r}
 hlm <- race_small_empty_arrests[RACE_GROUP == "HISPANIC/LATIN/MEXICAN", ]
@@ -455,17 +478,13 @@ hlm$INCIDENT.NO <- as.integer(hlm$INCIDENT.NO)
 #hlm$INCIDENT.NO
 ```
 
-
 ```{r}
 hlm_incidents <- merge(hlm, incidents, by = "INCIDENT.NO")
 hlm_incidents #about 1,000 rows with matching incidents
 #a little more than a quarter of the total hlm rows without a charge
 ```
 
-
-
 ```{r}
 sort(table(hlm_incidents[, INCIDENT.DESCRIPTION]), decreasing = TRUE)[1:10]
 #most frequent incidents 
 ```
-
